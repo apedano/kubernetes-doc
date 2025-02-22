@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  replicas: 2 # Number of pods (containers)
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:latest # Use the latest Nginx image
+          ports:
+            - containerPort: 80 # Nginx listens on port 80 inside the container
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+spec:
+  selector:
+    app: nginx
+  ports:
+    - protocol: TCP
+      port: 8080 # Port exposed externally
+      targetPort: 80 # Port the container listens on
+  type: LoadBalancer # Use LoadBalancer for external access (kind supports this)

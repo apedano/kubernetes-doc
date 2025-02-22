@@ -1,0 +1,1 @@
+kind create cluster --config ../config/my-two-nodes-cluster-config.yaml
