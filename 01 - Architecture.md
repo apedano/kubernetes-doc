@@ -1,10 +1,10 @@
 # 01 - Architecture
 
-Reference: https://spacelift.io/blog/kubernetes-architecture
-
-Dropbox document: https://www.dropbox.com/home/Studio%20dbi/Kubernetes?preview=Kubernetes+architecture.docx
-
-https://devopscube.com/kubernetes-architecture-explained/
+<!-- TOC -->
+* [01 - Architecture](#01---architecture)
+  * [Introduction](#introduction)
+    * [Control vs Data planes](#control-vs-data-planes)
+<!-- TOC -->
 
 ## Introduction
 
@@ -43,13 +43,10 @@ for example:
 
 ### Control vs Data planes
 
-|             | Control Pane                              | Data Pane                                    |
+|             | Control Plane                             | Data Plane                                   |
 |-------------|-------------------------------------------|----------------------------------------------|
 | Purpose     | Manages and orchestrates the cluster.     | Executes workloads and provides networking.  |
 | Location    | Runs on dedicated master nodes.           | Runs on worker nodes.                        |
 | Components  | API Server, Scheduler, Controllers, etcd  | Kubelet, Kube-Proxy, Container Runtime, Pods |
 | Interaction | Interfaces with administrators and users. | Interfaces with workloads and control plane. |
 
-TBC: https://spacelift.io/blog/kubernetes-architecture
-
-Ask questions to Gemini
