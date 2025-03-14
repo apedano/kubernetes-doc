@@ -1,34 +1,5 @@
 # 02 - Kubernetes main components
 
-<!-- TOC -->
-* [02 - Kubernetes main components](#02---kubernetes-main-components)
-  * [Workloads](#workloads)
-    * [POD](#pod)
-    * [Deployment](#deployment)
-    * [Service](#service)
-    * [Job](#job)
-    * [DaemonSets and StatefulSets](#daemonsets-and-statefulsets)
-  * [Control plane components](#control-plane-components)
-    * [API Server `kube-apiserver`](#api-server-kube-apiserver)
-    * [Controller Manager (`kube-controller-manager`)](#controller-manager-kube-controller-manager)
-      * [Controller types](#controller-types)
-    * [Scheduler (`kube-scheduler`)](#scheduler-kube-scheduler)
-    * [Etcd](#etcd)
-    * [Cloud Controller Manager](#cloud-controller-manager)
-  * [Node components](#node-components)
-    * [Kubelet](#kubelet)
-    * [Kube-Proxy](#kube-proxy)
-    * [Container runtime - Container Runtime Interface](#container-runtime---container-runtime-interface)
-  * [Kubernetes extensibility](#kubernetes-extensibility)
-    * [Networking - Container Network Interface](#networking---container-network-interface)
-    * [Storage](#storage)
-    * [Container registry](#container-registry)
-  * [Custom functionality - Custom Resource Definitions](#custom-functionality---custom-resource-definitions)
-  * [Kubernetes and security](#kubernetes-and-security)
-    * [Etcd encryption](#etcd-encryption)
-    * [Securing API server](#securing-api-server)
-<!-- TOC -->
-
 Reference: https://spacelift.io/blog/kubernetes-architecture
 
 Dropbox document: https://www.dropbox.com/home/Studio%20dbi/Kubernetes?preview=Kubernetes+architecture.docx
@@ -82,8 +53,12 @@ You’re using this API whenever you run a command with Kubectl or use a GUI to 
 You’ll lose management access to your cluster when the API server fails, but your workloads won’t necessarily be affected.
 
 ### Controller Manager (`kube-controller-manager`)
-Much of Kubernetes is built upon the _controller pattern_.
+Much of Kubernetes is built upon the _controller pattern_, an infinite loop of a sequence of _WATCH_, _ANALYZE_, _ACT_ actions.
 A controller is a loop that continually monitors your cluster and performs actions when certain events occur.
+Many customized controllers can be added to the cluster (sealed secrets is an example)
+
+![02-k8s-architecture-cm.gif](images%2F02%2F02-k8s-architecture-cm.gif)
+
 The **controller manager oversees all the controllers in your cluster**. 
 It starts their processes and ensures they’re operational the whole time that your cluster’s running.
 
@@ -97,18 +72,69 @@ It starts their processes and ensures they’re operational the whole time that 
 * _Job Controller_: Manages batch jobs that run to completion, such as data processing tasks. 
 * _CronJob Controller_: Manages scheduled jobs that run at specific intervals, such as backups or reports.
 
-### Scheduler (`kube-scheduler`)
-The **scheduler is responsible for placing newly created Pods onto the Nodes in your cluster**. 
-The scheduling process works by first filtering out Nodes that can’t host the Pod, and then scoring each eligible Node to identify the most suitable placement.
-Nodes could be filtered out because of insufficient CPU or memory, inability to satisfy the Pod’s affinity rules, or other factors such as being cordoned for maintenance. 
-The _scoring process_ prioritizes Pods that satisfy non-mandatory conditions like preferred affinities. 
-If several Nodes appear to be equally suitable, Kubernetes will try to evenly distribute your Pods across them.
-
 ### Etcd
-Etcd is a **distributed key-value storage system** used to store replicas of the cluster state on all nodes. 
-The main role of etcd is to **hold every API object, including config values and sensitive data you store in `ConfigMaps` and `Secrets`**.
-**Etcd is the most security-critical control plane component**. Successfully compromising it would permit full access to your Kubernetes data. 
-It’s important that etcd receives adequate hardware resources, too, as any starvation can affect the performance and stability of your entire cluster.
+
+![02-k8s-architecture-etcd.gif](images%2F02%2F02-k8s-architecture-etcd.gif)
+
+`etcd` is an open-source strongly consistent, distributed **key-value store**.
+
+* **Strongly consistent**: If an update is made to a node, strong consistency will ensure it gets updated to all the other nodes in the cluster immediately.
+* **Distributed**: etcd is designed to run on multiple nodes as a cluster without sacrificing consistency.
+* **Key Value Store**: A nonrelational database that stores data as keys and values. It also exposes a key-value API.
+
+It acts as both a **backend service discovery** and a **database**.
+
+etcd uses [raft consensus algorithm](https://raft.github.io/) for strong consistency and availability.
+For more details look here [Appendix B - How Raft works.md](Appendix%20B%20-%20How%20Raft%20works.md)
+It works in a leader-member fashion for high availability and to withstand node failures.
+
+So how does etcd work with Kubernetes?
+
+To put it simply, when you use kubectl to get kubernetes object details, you are getting it from etcd. Also, when you deploy an object like a pod, an entry gets created in etcd.
+
+In a nutshell, here is what you need to know about etcd.
+
+* `etcd` stores all configurations, states, and metadata of Kubernetes objects (pods, secrets, daemonsets, deployments, configmaps, statefulsets, etc).
+* `etcd` allows a client to subscribe to events using `Watch()` API . Kubernetes api-server uses the etcd’s watch functionality to track the change in the state of an object.
+* `etcd` exposes key-value API using `gRPC`. Also, the gRPC gateway is a RESTful proxy that translates all the HTTP API calls into gRPC messages. This makes it an ideal database for Kubernetes.
+* `etcd` stores all objects under the /registry directory key in key-value format. For example, information on a pod named Nginx in the default namespace can be found under /registry/pods/default/nginx
+
+Also, etcd it is the only **Statefulset component** in the control plane.
+
+The number of nodes in an etcd cluster directly affects its fault tolerance. Here’s how it breaks down:
+
+* 3 nodes: Can tolerate 1 node failure (quorum = 2)
+* 5 nodes: Can tolerate 2 node failures (quorum = 3)
+* 7 nodes: Can tolerate 3 node failures (quorum = 4)
+And so on. The general formula for the number of node failures a cluster can tolerate is:
+
+```
+fault tolerance = (n - 1) / 2
+```
+
+Where n is the total number of nodes.
+
+### Scheduler (`kube-scheduler`)
+The **scheduler is responsible for placing newly created Pods onto the Worker Nodes in your cluster**.
+
+The scheduling process works by first **filtering out Nodes** that can’t host the Pod, and then **scoring each eligible Node** to identify the most suitable placement.
+
+![02-k8s-architecture-sc.gif](images%2F02%2F02-k8s-architecture-sc.gif)
+
+#### Scheduler filtering and scoring
+
+When the POD requests is submitted from external services to the API Server (1), 
+the latter updates the specs in the `etcd` db with the desired state (2).
+(3) The scheduled status is notified to the external system. The scheduler detects the status change
+via the `Watch()` on the etcd db (4), updates the pod status (5).
+
+![02-k8s-architecture-sc-logic.gif](images%2F02%2F02-k8s-architecture-sc-logic.gif)
+
+(6) During the **filtering** phase, the scheduler selects a percentage of the cluster nodes (equals to `percentageOfNodesToScore`) 
+with the available resources for the pod, dialing with the nodes `kubelet` (7).
+The filtered nodes are applied to the **scoring** phase (based on multiple parameters of the https://kubernetes.io/docs/reference/scheduling/config/#scheduling-plugins)   
+Starting from the highest ranked node, the scheduler tries to create a **pod bound to a node** (8-9), going through the 
+ranked list if the bound fails. The scheduler then updates the status on the `etcd` db (10).
 
 ### Cloud Controller Manager
 The Cloud Controller Manager integrates Kubernetes with your cloud provider’s platform. 
@@ -144,6 +170,8 @@ The kube-proxy component facilitates network communications between the Nodes in
 It automatically **applies and maintains networking rules so that Pods exposed by Services are able to reach each other**. 
 If kube-proxy fails, Pods on that Node won’t be reachable over the network.
 Read more on Networking document
+
+https://devopscube.com/kubernetes-architecture-explained/
 
 ### Container runtime - Container Runtime Interface
 Each Node requires a CRI-compatible runtime so it can start your containers.
@@ -184,7 +212,6 @@ a database when you add a PostgresDatabaseConnection object to your cluster.
 
 They use the same fundamental concepts as built-in functionality: 
 you author a control loop that watches for new objects and performs tasks when they occur.
-
 
 ## Kubernetes and security
 Complexity and many moving parts create the potential for security problems. 
