@@ -3,7 +3,7 @@
 [kind](https://kind.sigs.k8s.io/ ) is a tool for running local Kubernetes clusters using Docker container “nodes”.
 kind was primarily designed for testing Kubernetes itself, but may be used for local development or CI.
 
-## Prerequisites 
+## Prerequisites on Windows
 
 ### GO installation 
 
@@ -208,7 +208,7 @@ This application has two pods exposed by the LoadBalancer service.
 we can deploy those to the cluster
 
 ```shell
-kubectl apply -f config/foo-app-config.yaml`
+kubectl apply -f config/load-balancer-test-app-config.yaml
 pod/foo-app created
 pod/bar-app created
 service/foo-service created

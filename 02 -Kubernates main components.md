@@ -161,14 +161,18 @@ The **control plane can contact Kubelet when it wants to schedule a new Pod** on
 
 `Kubelet` is also responsible for **running Pod containers**. 
 It pulls the images required by newly scheduled Pods and starts containers to produce the desired state. 
-Once the containers are up, Kubelet monitors them to ensure they remain healthy.
+Once the containers are up, Kubelet monitors them to ensure they remain healthy, taking care of executing readiness and liveness probes.
 
 Read more about Kubernetes [Image Pull Policy](https://spacelift.io/blog/kubernetes-imagepullpolicy) .
+
+![kubelet-architecture.png](images%2F02%2Fkubelet-architecture.png)
 
 ### Kube-Proxy
 The kube-proxy component facilitates network communications between the Nodes in your cluster. 
 It automatically **applies and maintains networking rules so that Pods exposed by Services are able to reach each other**. 
 If kube-proxy fails, Pods on that Node won’t be reachable over the network.
+
+
 Read more on Networking document
 
 https://devopscube.com/kubernetes-architecture-explained/
