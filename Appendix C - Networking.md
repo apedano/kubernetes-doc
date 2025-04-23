@@ -92,6 +92,27 @@ kubectl run curl-client --rm -i --tty --image=curlimages/curl -- /bin/sh
 {"job":"Supreme Commander of Stuff","pod":"backend-deployment-76cfdcfdd8-kbtql"}
 ```
 
+## `ClusterIP` Services and `kube-proxy`
+
+As we know, pods are ephemeral, meaning that we cannot rely on stable IP rules 
+to route network traffic in or outside the cluster. 
+
+> We need stable IP forward rules hiding the pod's IP unreliability.
+
+**On each cluster node** the `kube-proxy` runs as a `DaemonSet`, translating your Services into usable networking rules.
+
+![service_creation_drawio.png](images%2Fnetworking%2Fservice_creation_drawio.png)
+
+> `kube-proxy` primarily sets up iptables rules to route traffic between services and pods on each node to achieve this.
+
+However, other popular tools use different options like IPVS, eBPF, and nftables.
+
+Regardless of the underlying technology, 
+these rules instruct the kernel to rewrite the destination IP address from the service IP to the IP of one of the pods backing the service.
+
+Let's see how this works in practice.
+
+### `kube-proxy` and IPTables
 
 
 

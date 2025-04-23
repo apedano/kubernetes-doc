@@ -134,26 +134,6 @@ kubectl get nodes
 kubectl cluster-info
 ```
 
-### Kind main commands
-
-https://kind.sigs.k8s.io/docs/user/quick-start/
-
-| Command                                              | Description                             |
-|------------------------------------------------------|-----------------------------------------|
-| `kind create cluster --config <cluster_config_file>` | Creates a cluster with the given config |
-| `kind get clusters`                                  | Get running clusters                    |
-| `kind delete cluster --name <cluster_name>`          | Delete cluster with name                |
-
-> Make sure that Podman is running and the containers linked to the cluster are running
-
-
-| Podmain container name        | Description                            |
-|-------------------------------|----------------------------------------|
-| `kindccm-xxxxxx`              | The `kind` main container              |
-| `<cluster_name>-control-pane` | The `cluster control pane container    |
-| `<cluster_name>-worker`       | The n-th cluster worker node container |
-
-
 ### Expose network traffic 
 
 https://kind.sigs.k8s.io/docs/user/loadbalancer/

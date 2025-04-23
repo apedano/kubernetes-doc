@@ -15,4 +15,9 @@ echo "Label removal to allow load balancer traffic on control pane"
 kubectl label node my-two-node-cluster-control-plane node.kubernetes.io/exclude-from-external-load-balancers-
 
 
+cloud-provider-kind --enable-lb-port-mapping
+
+
+
+
 
