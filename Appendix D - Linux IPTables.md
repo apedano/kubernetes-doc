@@ -116,6 +116,8 @@ $ iptables -A DOCKER -j RETURN
 
 Chains are grouped in tables and multiple tables can define the same chain (for instance INPUT).
 
+`iptables` has five modes of operations (i.e. tables): filter, nat, mangle, raw and security.
+
 Tables change based on the kernel used, but the most commons are
 
 ```bash
@@ -152,6 +154,9 @@ security:
     packets coming into the box itself), OUTPUT (for altering locally-generated packets before
     routing), and FORWARD (for altering packets being routed through the box).
 ```
+
+![iptables_tables.svg](images%2Fiptables%2Fiptables_tables.svg)
+
 
 Therefore, we can have overlapping rules.
 What will happen to a packet if `filter.INPUT` chain has a DROP target but `mangle.INPUT` chain has an ACCEPT target, both within the affirmative rules
