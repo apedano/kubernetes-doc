@@ -142,16 +142,57 @@ Kubernetes uses custom chains:
     - As pods are added or removed from the service, `kube-proxy` dynamically updates these chains.
     - the traffic is DNAT (destination IP replaced) to the pod IP
 
+
 ## CASE 1 - POD to `ClusterIP` Service traffic
 
-A pod sends a packet to the ClusteIP Service
+Make sure the backend deployment and the service are deployed to the cluster
+
+[backend-deployment.yaml](config%2Fnetworking%2Fbackend-deployment.yaml)
+[backend-service.yaml](config%2Fnetworking%2Fbackend-service.yaml)
+
+### Create a pod in the kind cluster to call the backend svc
+
+Get the service ip
 
 ```bash
-curl http://10.96.5.81:3000
+$ kubectl get svc
+NAME                        TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)        AGE
+backend-service             ClusterIP   10.96.91.147    <none>        3000/TCP       10m
+...
+```
+Now we can create a pod and connect to its terminal
+
+```bash
+kubectl run curl-client --rm -i --tty \
+--image=curlimages/curl -- /bin/sh
 ```
 
-The `kube-proxy` on the target worker node will start with the **PREROUTING** of the NAT iptable
+and send a packet to the ClusterIP Service
 
+```bash
+curl http://10.96.91.147:3000 
+```
+
+### Connect to a cluster node
+
+
+We can connect to any node with the following
+
+```bash
+podman ps
+```
+And identify the name of the cluster's master node: `my-two-node-cluster-control-plane`
+Now we connect to it
+
+```bash
+podman exec -it my-two-node-cluster-control-plane bash
+```
+
+We now have access to the iptables chains
+
+
+### Analyse the iptables NAT table in the master node
+The `kube-proxy` on the target worker node will start with the **PREROUTING** of the NAT iptable
 ```bash
 iptables -t nat -L PREROUTING --line-numbers
 
@@ -164,48 +205,50 @@ iptables -t nat -L PREROUTING --line-numbers
 The first line `KUBE-SERVICES` matches the target ip (`anywhere`),
 
 ```bash
-iptables -t nat -L KUBE-SERVICES -n --line-numbers
-
-#output
-1  KUBE-SVC-NPX46M4PTMTKRN6Y  /* default/kubernetes:https cluster IP */ tcp dpt:443
-2  KUBE-SVC-TCOU7JCQXEZGVUNU  /* kube-system/kube-dns:dns cluster IP */ udp dpt:53
-3  KUBE-SVC-ERIFXISQEP7F7OF4  /* kube-system/kube-dns:dns-tcp cluster IP */ tcp dpt:53
-4  KUBE-SVC-JD5MR3NA4I4DYORP  /* kube-system/kube-dns:metrics cluster IP */ tcp dpt:9153
-5  KUBE-SVC-6R7RAWWNQI6ZLKMO  /* default/backend-service:backend cluster IP */ tcp dpt:3000
-6  KUBE-NODEPORTS             /* kubernetes service nodeports;
+Chain KUBE-SERVICES (2 references)
+num  target     prot opt source               destination
+1    KUBE-SVC-TCOU7JCQXEZGVUNU  17   --  0.0.0.0/0            10.96.0.10           /* kube-system/kube-dns:dns cluster IP */ udp dpt:53
+2    KUBE-SVC-RMXBZCT6XVCXF3QP  6    --  0.0.0.0/0            10.96.91.147         /* default/backend-service:backend cluster IP */ tcp dpt:3000
+3    KUBE-SVC-L2KBDCMJUD65WX3D  6    --  0.0.0.0/0            10.96.141.224        /* default/frontend-nodeport-service:frontend cluster IP */ tcp dpt:80
+4    KUBE-SVC-NPX46M4PTMTKRN6Y  6    --  0.0.0.0/0            10.96.0.1            /* default/kubernetes:https cluster IP */ tcp dpt:443
+5    KUBE-SVC-ERIFXISQEP7F7OF4  6    --  0.0.0.0/0            10.96.0.10           /* kube-system/kube-dns:dns-tcp cluster IP */ tcp dpt:53
+6    KUBE-SVC-JD5MR3NA4I4DYORP  6    --  0.0.0.0/0            10.96.0.10           /* kube-system/kube-dns:metrics cluster IP */ tcp dpt:9153
+7    KUBE-NODEPORTS  0    --  0.0.0.0/0            0.0.0.0/0            /* kubernetes service nodeports; NOTE: this must be the last rule in this chain */ ADDRTYPE match dst-type LOCAL
 ```
 
-The chain matching the destination IP:PORT is 5, having the cluster ip as target and 3000 as port
-
-```bash
-5  KUBE-SVC-6R7RAWWNQI6ZLKMO  /* default/backend-service:backend cluster IP */ tcp dpt:3000
-```
+The chain matching the destination IP:PORT `10.96.91.147:3000` is 2, having `backend-service:backend cluster IP tcp dpt:3000`
 
 Again the intercepted chain is 
 
 ```bash
-iptables -t nat -L KUBE-SVC-6R7RAWWNQI6ZLKMO -n --line-numbers
-1  KUBE-MARK-MASQ              /* default/backend-service:backend cluster IP */ tcp dpt:3000
-2  KUBE-SEP-O3HWD4DESFNXEYL6   /* default/backend-service:backend -> 10.244.1.2:3000 */
-3  KUBE-SEP-C2Y64IBVPH4YIBGX   /* default/backend-service:backend -> 10.244.1.3:3000 */
-4  KUBE-SEP-MRYDKJV5U7PLF5ZN   /* default/backend-service:backend -> 10.244.1.4:3000 */
+$ iiptables -t nat -L KUBE-SVC-RMXBZCT6XVCXF3QP -n --line-numbers
+
+Chain KUBE-SVC-RMXBZCT6XVCXF3QP (1 references)
+num  target prot opt source               destination
+1    KUBE-MARK-MASQ             6    -- !10.244.0.0/16        10.96.91.147         /* default/backend-service:backend cluster IP */ tcp dpt:3000
+2    KUBE-SEP-MP6GSFTQB7676C7X  0    --  0.0.0.0/0            0.0.0.0/0            /* default/backend-service:backend -> 10.244.1.3:3000 */ statistic mode random probability 0.50000000000
+3    KUBE-SEP-TNKKKJMPBBOB5NOU  0    --  0.0.0.0/0            0.0.0.0/0            /* default/backend-service:backend -> 10.244.1.4:3000 */
 ```
 
 The first chain is `KUBE-MARK-MASQ`, which patches the source IP when the destination is external to the cluster,
 which is not this case
 
-The second is a certain number of **SEP service endpoint chain**
+The next lines are **SEP service endpoint chain**
 
 > One SEP chain is created for each `Endpoint` generated by the `Service`. The selection of the chain is based on probability and affinity to balance the traffic 
 
+in this case we have two SEP chains each linked to the POD ip(s), since the deployment has 2 replicas
+
 Suppose the one below is selected
 ```bash
-iptables -t nat -L KUBE-SEP-O3HWD4DESFNXEYL6 -n --line-numbers
-1    KUBE-MARK-MASQ    10.244.1.2    0.0.0.0/0    /* default/backend-service:backend */
-2    DNAT                                         /* default/backend-service:backend */ tcp to:10.244.1.2:3000
+iptables -t nat -L KUBE-SEP-MP6GSFTQB7676C7X -n --line-numbers
+Chain KUBE-SEP-MP6GSFTQB7676C7X (1 references)
+num  target     prot opt      source               destination
+1    KUBE-MARK-MASQ  0    --  10.244.1.3           0.0.0.0/0            /* default/backend-service:backend */
+2    DNAT            6    --  0.0.0.0/0            0.0.0.0/0            /* default/backend-service:backend */ tcp to:10.244.1.3:3000
 ```
 
-This time the KUBE-MARK-MASK chain matches the source IP 10.244.1.2.
+This time the KUBE-MARK-MASK chain matches the source IP 10.244.1.3 which is the pod ip Endpoint linked to the SEP chain
 This is needed for **Hairpin NAT** explained below.
 
 The **DNAT** rule changes the destination IP of the packet replacing it with the POD IP.
@@ -291,6 +334,19 @@ and the **reverse NAT** (Source and Dest) is performed
 | SourceIP                         | DestinationIP                     | Mark |
 |----------------------------------|-----------------------------------|------|
 | `10.0.0.10` (from original DNAT) | `10.244.1.6` (from original SNAT) |      |
+
+## Case 2 - POD to `NodePort` Service traffic
+
+### Deploy the frontend application and `NodePort` Service
+Create the 3 replicas deployment called `frontend-deployment`
+[frontend-deployment.yaml](config%2Fnetworking%2Ffrontend-deployment.yaml)
+
+This time we expose it with a `NodePort` service because we want the deployment pods to
+be **reachable from outside the cluster**.
+
+[frontend-nodeport-service.yaml](config%2Fnetworking%2Ffrontend-nodeport-service.yaml)
+
+ADD deployment and services to the cluster initialization script
 
 
 
