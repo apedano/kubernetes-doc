@@ -384,6 +384,7 @@ extraPortMappings:
 So, from outside the cluster (cmd line) we can execute `curl localhost:30000`
 
 ### iptables setting for NodePort traffic handling
+Packet from external network
 
 | SourceIP    | DestinationIP       | Mark |
 |-------------|---------------------|------|
@@ -399,13 +400,14 @@ num  target     prot opt source               destination
 7    KUBE-NODEPORTS  0    --  0.0.0.0/0            0.0.0.0/0            /* kubernetes service nodeports; NOTE: this must be the last rule in this chain */ ADDRTYPE match dst-type LOCAL
 ```
 
-This time the intercepted custom chain is the **KUBE-NODEPORTS**, the last being tested when a packet reaches the node.
+This time no **SVC** chains are matched, so the intercepted custom chain is the **KUBE-NODEPORTS**, the last being tested when a packet reaches the node.
 
 We can filter what is set for the Nodeport port number
 
+
 ```bash
 $ iptables -t nat -L KUBE-NODEPORTS -n -v --line-numbers | grep 30000
-1        0     0 KUBE-EXT-L2KBDCMJUD65WX3D  6    --  *      *       0.0.0.0/0            0.0.0.0/0            /* default/frontend-nodeport-service:frontend */ tcp dpt:32721
+1        0     0 KUBE-EXT-L2KBDCMJUD65WX3D  6    --  *      *       0.0.0.0/0            0.0.0.0/0            /* default/frontend-nodeport-service:frontend */ tcp dpt:30000
 ```
 
 And the content of the chain is
@@ -427,7 +429,7 @@ num   pkts bytes target     prot opt in     out     source               destina
 |-------------|------------------------|----------|
 | EXTERNAL_IP | `10.244.1.4:8080` DNAT | `0x4000` |
 
-- Then the **POSTROUTING** chain is called responsible of the `SNAT`
+- Then the **POSTROUTING** chain is called, it is responsible for the `SNAT`
     - Here if the packet is marked SNAT is applied
     - The mark is removed
 
@@ -438,9 +440,143 @@ num   pkts bytes target     prot opt in     out     source               destina
 In  the **return traffic**, the external IP is applied by the `conntrack` functionality of the node
 as seen in the case before.
 
-LOAD BALANCER
+
+## Case 2 - POD to `LoadBalancer` Service traffic
+
+This is a third type of services which refers to a **third party component** running next to the cluster.
+For example, we use `cloud-provider-kind` as load balancer service.
+
+When the following is submitted the the API Server 
+
+[load-balancer-test-app-config.yaml](config%2Fload-balancer-test-app-config.yaml)
 
 
-READ https://learnk8s.io/kubernetes-services-and-load-balancing#load-balancer-service
+```bash
+ kubectl apply -f ./kube-config/load-balancer-test-app-config.yaml
+pod/foo-app created
+pod/bar-app created
+service/foo-service created
+```
+
+When the service is applied an IP address is assigned by the LB itself
+
+```bash
+NAME                  TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+foo-service       LoadBalancer   10.96.91.224   10.89.0.7     5678:32591/TCP   27s
+```
+this applies to the port 5678 because it is the port specification in the service
+
+```yaml
+kind: Service
+metadata:
+  name: foo-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: http-echo
+  ports:
+    - port: 5678 #port exposed by the LB
+      targetPort: 8080 #port exposed by the pods
+```
+If we call the LB multiple times we will see balanced responses by the pods
+
+```bash
+#LB_IP will contain the External IP exposed by the LB
+LB_IP=$(kubectl get svc/foo-service -o=jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+echo $LB_IP #10.89.1.10 in our cluster
+
+# should output foo and bar depending on the lb assigned pod 
+for i in {1..10}; do  
+  curl ${LB_IP}:5678 
+done 
+```
+
+> Internally, a NodePort service is created at every node, so the traffic coming from the balancer 
+> will be balanced among the NodePort services (if the selected node doesn't contain target pods, an extra hop is necesasry)
+
+Then the traffic is routed by the `NodePort` inside the node as shown in the case before.
+
+Let's see how the traffic is routed on the nodes
+
+```bash
+podman exec -it my-two-node-cluster-control-plane bash
+
+root@my-two-node-cluster-control-plane:/# iptables -t nat -L KUBE-NODEPORTS -n -v --line-numbers
+Chain KUBE-NODEPORTS (1 references)
+num   pkts bytes target     prot opt in     out     source               destination
+1        5   300 KUBE-EXT-L6225SIXICQL5TGT  6    --  *      *       0.0.0.0/0            0.0.0.0/0            /* default/foo-service */ tcp dpt:32591
+```
+
+The **EXT** chain is the one matching the `32591` target port assigned to the `foo-service` LB service.
+
+```bash
+root@my-two-node-cluster-control-plane:/# iptables -t nat -L KUBE-NODEPORTS -n -v --line-numbers
+Chain KUBE-NODEPORTS (1 references)
+num   pkts bytes target     prot opt in     out     source               destination
+1        5   300 KUBE-EXT-L6225SIXICQL5TGT  6    --  *      *       0.0.0.0/0            0.0.0.0/0            /* default/foo-service */ tcp dpt:32591
+root@my-two-node-cluster-control-plane:/# iptables -t nat -L KUBE-EXT-L6225SIXICQL5TGT -n -v --line-numbers
+Chain KUBE-EXT-L6225SIXICQL5TGT (1 references)
+num   pkts bytes target     prot opt in     out     source               destination
+1        5   300 KUBE-MARK-MASQ  0    --  *      *       0.0.0.0/0            0.0.0.0/0            /* masquerade traffic for default/foo-service external destinations */
+2        5   300 KUBE-SVC-L6225SIXICQL5TGT  0    --  *      *       0.0.0.0/0            0.0.0.0/0
+root@my-two-node-cluster-control-plane:/# iptables -t nat -L KUBE-SVC-L6225SIXICQL5TGT -n -v --line-numbers
+Chain KUBE-SVC-L6225SIXICQL5TGT (2 references)
+num   pkts bytes target     prot opt in     out     source               destination
+1        0     0 KUBE-MARK-MASQ  6    --  *      *      !10.244.0.0/16        10.96.91.224         /* default/foo-service cluster IP */ tcp dpt:5678
+2        2   120 KUBE-SEP-DVOBJ7OJCOYILCLE  0    --  *      *       0.0.0.0/0            0.0.0.0/0            /* default/foo-service -> 10.244.1.10:8080 */ statistic mode random probability 0.50000000000
+3        3   180 KUBE-SEP-UNHXZGN7JLV6JRBI  0    --  *      *       0.0.0.0/0            0.0.0.0/0            /* default/foo-service -> 10.244.1.9:8080 */
+```
+
+The SEP chains will be present in both cluster nodes in order to forward the traffic properly
+
+### LB health checks
+
+When you set `externalTrafficPolicy: Local`, Kubernetes assigns a `healthCheckNodePort` to verify the health of the service's nodes,
+because it needs to forward traffic to those nodes having active pods for the service.
+
+- If the node has a healthy pod running the service, it passes the check, and the load balancer routes traffic to it.
+
+- If the node does not have active pods for the service, it fails the check, and traffic stops being sent to that node.
+
+It does this by regularly performing health checks on the nodes.
+
+These checks typically target a NodePort and happen every 60 seconds.
+
+
+## Kubernetes `externalTrafficPolicy` Explained
+
+In Kubernetes, the `externalTrafficPolicy` field is a setting used in **Service** resources of type `LoadBalancer` or `NodePort`. It controls how traffic from external clients is routed to the backend Pods.
+
+## Values of `externalTrafficPolicy`
+
+### 1. `Cluster` (default)
+- External traffic is distributed **across all nodes** in the cluster, regardless of where the actual backend Pods are running.
+- The traffic may be **routed internally** to nodes that do have the Pods.
+- **Pros**: Better load distribution; can use all nodes in the cluster.
+- **Cons**: The **source IP is lost** (NATed), so the Pods won't see the real client IP unless something like `proxy protocol` is used.
+
+### 2. `Local`
+- Traffic is only routed to nodes that **actually have the backend Pods** for the Service.
+- **Source IP is preserved (no SNAT)**, which is useful for logging, firewalling, etc.
+- **Pros**: Preserves client IP.
+- **Cons**: Can lead to uneven load if Pods are not evenly spread across nodes; some requests might fail if a node receives traffic but has no Pods.
+
+## Example YAML
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: my-app
+  ports:
+    - port: 80
+      targetPort: 8080
+  externalTrafficPolicy: Local
+```
 
 

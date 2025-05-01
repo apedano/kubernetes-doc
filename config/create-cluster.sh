@@ -14,11 +14,11 @@ kubectl cluster-info --context kind-my-two-node-cluster
 echo "Label removal to allow load balancer traffic on control pane"
 kubectl label node my-two-node-cluster-control-plane node.kubernetes.io/exclude-from-external-load-balancers-
 
+echo "Adding backend and frontend deployements and services"
+kubectl apply -f ./kube-config/networking/
 
-echo "Applying backend and frontend deployment and service"
-kubectl apply -f ./networking/
-
-echo "Starting load balancer service"
+echo "Setting the path for go installed packages"
+export PATH="/root/go/bin/:$PATH"
 cloud-provider-kind --enable-lb-port-mapping
 
 

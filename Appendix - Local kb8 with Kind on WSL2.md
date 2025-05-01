@@ -138,6 +138,26 @@ cloud-provider-kind --enable-lb-port-mapping
 > to add the flag `--enable-lb-port-mapping` to the cloud-provider-kind command. 
 > This is due to podman not being able to bind to privileged ports by default.
 
+### [Optional] Solve the `PATH` issue
+
+If the command above returns `cloud-provider-kind: command not found` the folder of the go commands must be added to the `PATH`
+
+First, find where the command has been installed
+```bash
+$ find / -name "cloud-provider-kind"
+
+...
+/root/go/bin/cloud-provider-kind
+
+```
+Now to add the path, we add it to the `home/<user>/.bashrc` file
+Add export `PATH="your-dir:$PATH"` to the last line of the file, 
+where `your-dir` is the directory you want to add.
+In our case
+`export PATH="/root/go/bin/:$PATH"`
+Restarting the terminal applies the change
+
+
 ### Testing the Load Balancer
 
 To test the load balancer we can apply the following file to the cluster
@@ -161,9 +181,9 @@ LB_IP=$(kubectl get svc/foo-service -o=jsonpath='{.status.loadBalancer.ingress[0
 echo $LB_IP #10.89.1.10 in our cluster
 
 # should output foo and bar depending on the lb assigned pod 
-for i in {1..10}; do
-  curl ${LB_IP}:5678
-done
+for i in {1..10}; do  
+  curl ${LB_IP}:5678 
+done 
 ```
 To delete the test content
 
