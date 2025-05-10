@@ -18,8 +18,9 @@ kube-dns   ClusterIP   10.96.0.10   53/UDP,53/TCP,9153/TCP
 
 
 ```
+## Run terminals
 
-## Execute a bash terminal from a pod
+### Execute a bash terminal from a pod
 
 ```bash
 kubectl run curl-client --rm -i --tty --image=curlimages/curl -- /bin/sh
@@ -34,6 +35,26 @@ kubectl run curl-client --rm -i --tty --image=curlimages/curl -- /bin/sh
 * `-- /bin/sh`: 
   * The double dash (`--`) separates the kubectl flags from the command that will be executed inside the container.
   * `/bin/sh` is the command that will be executed when the container starts. It launches a basic shell within the container.
+
+### Access Terminal on existing pod
+
+
+
+
+
+## Read logs from a pos or a selector
+
+```shell
+$ kubectl logs -f pod/shared-volume-pod -c reader
+Hello from writer container
+
+kubectl logs -f -l app=shared-volume -c reader
+Hello from writer container
+```
+`-c` is the container name running inside the pod 
+`-f` follows the log (same as tailing)
+`-l` label to select pods
+
 
 
 

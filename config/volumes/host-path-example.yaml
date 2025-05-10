@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hostpath-demo
+spec:
+  containers:
+    - name: busybox
+      image: busybox
+      command: ["sleep", "3600"]
+      volumeMounts:
+        - mountPath: /node-var
+          name: host-volume
+  volumes:
+    - name: host-volume
+      hostPath:
+        path: /var
+        type: Directory
