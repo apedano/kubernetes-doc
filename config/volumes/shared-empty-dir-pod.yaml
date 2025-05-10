@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: shared-volume-pod
+spec:
+  volumes:
+    - name: shared-data
+      emptyDir:
+        medium: Memory
+        sizeLimit: 10Mi
+  containers:
+    - name: writer
+      image: busybox
+      command: ["/bin/sh", "-c"]
+      args:
+        - echo "Hello from writer container" > /data-writer/message.txt;
+          sleep 3600;
+      volumeMounts:
+        - name: shared-data
+          #the mount point does not have to be the same as the one on the reader container
+          #bacuase it is local in the container file system
+          mountPath: /data-writer
+
+    - name: reader
+      image: busybox
+      command: ["/bin/sh", "-c"]
+      args:
+        - cat /data/message.txt || echo "File not found";
+          sleep 3600;
+      volumeMounts:
+        - name: shared-data
+          mountPath: /data
