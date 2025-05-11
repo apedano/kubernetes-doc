@@ -187,10 +187,3 @@ backups  cache    lib      local    lock     log      mail     opt      run     
 | `Socket`            | The specified path must be a UNIX socket.                                                                                                                                                                            |
 
 
-
-
-
-Chapter 9 config map and secrets
-
-https://wangwei1237.github.io/Kubernetes-in-Action-Second-Edition/docs/Configuring_applications_using_ConfigMaps_Secrets_and_the_Downward_API.html
-

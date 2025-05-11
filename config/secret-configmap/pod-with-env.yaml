@@ -1,0 +1,15 @@
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-with-env
+spec:
+  containers:
+    - name: busybox
+      image: busybox
+      command: ["sleep", "3600"]
+      env:
+        - name: POD_NAME
+          value: kiada
+        - name: INITIAL_STATUS_MESSAGE
+          value: My name is $(POD_NAME). I run NodeJS version $(NODE_VERSION).

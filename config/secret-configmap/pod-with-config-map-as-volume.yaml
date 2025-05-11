@@ -1,0 +1,17 @@
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-with-config-map-as-volume
+spec:
+  containers:
+    - name: busybox
+      image: busybox
+      command: ["sleep", "3600"]
+      volumeMounts:
+        - name: files
+          mountPath: /data/
+  volumes:
+    - name: files
+      configMap:
+        name: config-map-as-volume

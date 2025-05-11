@@ -1,4 +1,4 @@
-# 05 - Storage
+# 06 - Storage
 
 https://rafay.co/the-kubernetes-current/dynamically-provisioning-persistent-volumes-with-kubernetes/
 

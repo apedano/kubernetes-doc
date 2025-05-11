@@ -38,7 +38,9 @@ kubectl run curl-client --rm -i --tty --image=curlimages/curl -- /bin/sh
 
 ### Access Terminal on existing pod
 
-
+```shell
+$ kubectl exec -it <pod_name> -- sh
+```
 
 
 
