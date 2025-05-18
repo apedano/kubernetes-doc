@@ -579,4 +579,13 @@ spec:
   externalTrafficPolicy: Local
 ```
 
+## Expose traffic using NGINX Ingress
+
+### Create a kind cluster
+
+
+
+
+
+
 
