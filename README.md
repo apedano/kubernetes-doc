@@ -11,6 +11,7 @@
 * Storage (Storage classes)
 * Deployment types (BlueGreen, Rollout, Canary...)
   * https://wangwei1237.github.io/Kubernetes-in-Action-Second-Edition/docs/Updating_a_Deployment.html
+  * https://github.com/anveshmuppeda/kubernetes?tab=readme-ov-file#deployment-strategies
 * StatefulSets
   * https://wangwei1237.github.io/Kubernetes-in-Action-Second-Edition/docs/Deploying_stateful_workloads_with_StatefulSets.html
 * Deamons and agents

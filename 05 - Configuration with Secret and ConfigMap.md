@@ -347,7 +347,7 @@ containers:
       - 'echo "Hostname is $HOSTNAME."; sleep infinity'
 ```
 
-## Injecting `ConfigMap` in a pod
+## Injecting `ConfigMap` and `Secret` in a pod
 
 ### Injecting into container env vars
 
@@ -368,6 +368,11 @@ spec:
               name: kiada-config
               key: status-message
               optional: true
+        - name: TLS_CERT
+          valueFrom:
+            secretKeyRef:
+              name: kiada-tls
+              key: tls.crt
       volumeMounts:
         - ...
 ```
@@ -417,7 +422,7 @@ INITIAL_STATUS_MESSAGE=My name is kiada. I run NodeJS version $(NODE_VERSION).
 ...
 ```
 
-### Injecting a ConfigMap as volume
+### Injecting a ConfigMap or Secret as volume
 
 [config-map-as-volume-cm.yaml](config%2Fsecret-configmap%2Fconfig-map-as-volume-cm.yaml)
 [pod-with-config-map-as-volume.yaml](config%2Fsecret-configmap%2Fpod-with-config-map-as-volume.yaml)
@@ -435,11 +440,25 @@ spec:
       volumeMounts:
         - name: files
           mountPath: /data/
+        - name: cert-and-key
+          mountPath: /etc/certs
+          readOnly: true
   volumes:
     - name: files
       configMap:
         name: config-map-as-volume
+    - name: cert-and-key
+      secret:
+          secretName: kiada-tls
+          items:
+            - key: tls.crt
+              path: example-com.crt
+            - key: tls.key
+              path: example-com.key
+              mode: 0600
 ```
+
+![secret_as_volume.png](images%2F05%2Fsecret_as_volume.png)
 
 ```shell
 root@LAPTOP-6ONT27E9:/home/pedaa00# kubectl exec -it pod/pod-with-config-map-as-volume -- sh
@@ -449,7 +468,3 @@ data.bin       library.bin    text-file.txt
 /data # cat text-file.txt
 string file content
 ```
-
-Chapter 9 config map and secrets
-
-https://wangwei1237.github.io/Kubernetes-in-Action-Second-Edition/docs/Configuring_applications_using_ConfigMaps_Secrets_and_the_Downward_API.html
