@@ -98,3 +98,13 @@ Now we connect to it
 ```bash
 podman exec -it my-two-node-cluster-control-plane bash
 ```
+
+### Get the IP address
+
+```bash
+podman inspect -f '{{.NetworkSettings.Networks.kind.IPAddress}}' <KIND_NODE_CONTAINER_NAME>
+```
+
+
+
+

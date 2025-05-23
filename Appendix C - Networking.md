@@ -583,9 +583,122 @@ spec:
 
 ### Create a kind cluster
 
+Execute
+[create-cluster.sh](config%2Fnetworking%2Fingress2%2Fcreate-cluster.sh)
 
+This configuration will expose port 80 and 443 on the host.
+It’ll also add a node label so that the nginx-controller may use a node selector to target only this node.
+If a kind configuration has multiple nodes, it’s essential to only bind ports 80 and 443 on the host for one node because port collision will occur otherwise.
 
+Check the status of the node
+```bash
+kubectl get node --show-labels
+NAME                                STATUS   ROLES           AGE   VERSION   LABELS
+cluster-for-ingress-control-plane   Ready    control-plane   25s   v1.32.2   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,ingress-ready=true,kubernetes.io/arch=amd64,kubernetes.io/hostname=cluster-for-ingress-control-plane,kubernetes.io/os=linux,node-role.kubernetes.io/control-plane=
+```
 
+### Install Nginx controller
 
+```shell
+kubectl apply --filename https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/static/provider/kind/deploy.yaml
+```
 
+the command will install the controller on the `ingress-nginx` namespace. 
+We can wait for the controller's pod to be ready 
 
+```shell
+
+kubectl wait --namespace ingress-nginx \
+ --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+   --timeout=180s
+```
+
+We can now deploy on any namespace a simple application with the service of type `ClusterIp`
+
+### Deploy sample workload
+
+```shell
+kubectl run hello \
+--expose \
+--image nginxdemos/hello:plain-text \
+--port 80
+
+pod/hello created
+service hello created
+```
+
+### Deploy `Ingress`
+
+We define a new Ingress from 
+
+[hello-ingress.yaml](config%2Fnetworking%2Fingress2%2Fhello-ingress.yaml)
+
+```yaml
+    - host: hello.test.com
+      http:
+        paths:
+          - pathType: ImplementationSpecific
+            backend:
+              service:
+                name: hello
+                port:
+                  number: 80
+```
+where incoming calls with host `hello.test.com` will be forwarded to the `hello` service
+
+Now we can deploy the `Ingress` element
+
+```shell
+kubectl apply -f hello-ingress.yaml
+```
+And chech the status
+
+```shell
+
+$ kubectl describe ingress hello
+
+Name:             hello
+Labels:           <none>
+Namespace:        default
+Address:          localhost
+Ingress Class:    <none>
+Default backend:  <default>
+Rules:
+  Host              Path  Backends
+  ----              ----  --------
+  hello.test.com    hello:80 (10.244.0.8:80)
+Annotations:      <none>
+Events:
+  Type    Reason  Age                    From                      Message
+  ----    ------  ----                   ----                      -------
+  Normal  Sync    8m (x2 over 8m32s)     nginx-ingress-controller  Scheduled for sync
+  Normal  Sync    7m36s (x2 over 7m36s)  nginx-ingress-controller  Scheduled for sync
+```
+
+### Test call
+
+First we need to find the IP address of the node (running on podman) where the ingress is active
+
+```bash
+$ podman inspect -f '{{.NetworkSettings.Networks.kind.IPAddress}}' cluster-for-ingress-control-plane
+10.89.0.5
+```
+
+> The call to the `Ingress` must contain the host `hello.test.com` otherwise the proxy will not be intercepted
+
+Therefore we need to add the resolution of the host on the local machine by adding the follwing to `etc/hosts`
+
+`10.89.0.5 hello.test.com`
+
+And, finally, we can make the call
+
+```bash
+$ curl hello.test.com
+
+Server address: 10.244.0.8:80
+Server name: hello
+Date: 23/May/2025:08:18:36 +0000
+URI: /
+Request ID: de6ca3cd335b53abc14cd9e040aa29e3**
+```
