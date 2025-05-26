@@ -4,22 +4,28 @@ NAMESPACE="rbac-test"
 CLUSTER="cluster-for-rbac"
 #value set later
 API_URL=""
+CREATE_CLUSTER=true
 
 set -e
 
-echo "Delete pre existing cluster"
 
-kind delete cluster --name "$CLUSTER"
+if [ $CREATE_CLUSTER ]
+then
+  echo "Delete pre existing cluster"
+  kind delete cluster --name "$CLUSTER"
 
-echo "Create cluster"
-kind create cluster --config ./cluster-for-rbac.yaml
+  echo "Create cluster"
+  kind create cluster --config ./cluster-for-rbac.yaml
 
-echo "Link kubectl to cluster"
+  echo "Link kubectl to cluster"
 
-kubectl cluster-info --context kind-cluster-for-rbac
-
+  kubectl cluster-info --context kind-cluster-for-rbac
+  echo "Create the ${NAMESPACE} namespace"
+  kubectl create namespace "$NAMESPACE"
+fi
 echo "Run the script to create the Uthred user csr"
 cd uthred
+dir
 ./script.sh
 cd ..
 
@@ -55,14 +61,11 @@ done
 
 
 echo "Extracting ca.crt"
-kubectl config view --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > ca.crt
+kubectl config view --raw -o jsonpath='{.clusters[?(@.name=="kind-cluster-for-rbac")].cluster.certificate-authority-data}' | base64 -d > ca.crt
 
 echo "Extracting API url"
-API_URL=$(kubectl config view --raw -o jsonpath='{.clusters[0].cluster.server}')
+API_URL=$(kubectl config view --raw -o jsonpath='{.clusters[?(@.name=="kind-cluster-for-rbac")].cluster.server}')
 echo "API_URL=$API_URL"
-
-echo "Create the ${NAMESPACE} namespace"
-kubectl create namespace "$NAMESPACE"
 
 echo "Change the kubectl context to link to the namespace"
 kubectl config set-context --current --namespace="$NAMESPACE"
@@ -70,13 +73,14 @@ kubectl config set-context --current --namespace="$NAMESPACE"
 echo "Create example pods"
 kubectl apply -f ../networking/backend-deployment.yaml
 
-echo "Sending initial call with expected forbidden"
-CURL_COMMAND="curl ${API_URL}/api/v1/namespaces/${NAMESPACE}/pods --cacert ./ca.crt --cert ./uthred/uthred.crt --key ./uthred/uthred.key"
+echo "Sending initial call with expected forbidden (curl returning status code only with -I)"
+CURL_COMMAND="curl -I ${API_URL}/api/v1/namespaces/${NAMESPACE}/pods --cacert ./ca.crt --cert ./uthred/uthred.crt --key ./uthred/uthred.key"
 echo "$CURL_COMMAND"
 eval "$CURL_COMMAND"
 
 echo "Creating role and role binding to give access to the user"
 kubectl apply -f pod-reader-role.yaml
+kubectl apply -f pod-list-serviceaccount.yaml
 kubectl apply -f uthred-pod-reader-rolebinding.yaml
 
 echo "The command should get the pods"

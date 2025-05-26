@@ -195,7 +195,17 @@ pod "bar-app" deleted
 service "foo-service" deleted
 ```
 
+## Troubleshooting
 
+### Carriage return
+
+If the error when we launch a script is like 
+```shell
+usr/bin/env: ‘bash\r’: No such file or directory
+/usr/bin/env: use -[v]S to pass options in shebang lines
+```
+
+Then the script has Windows CRLF, change it to LF only
 
 
 

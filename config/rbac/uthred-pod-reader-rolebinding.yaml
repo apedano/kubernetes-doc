@@ -7,6 +7,9 @@ subjects:
   - kind: User
     name: uthred
     apiGroup: rbac.authorization.k8s.io
+  - kind: ServiceAccount
+    name: pod-list-serviceaccount
+    namespace: rbac-test
 roleRef:
   kind: Role
   name: pod-reader

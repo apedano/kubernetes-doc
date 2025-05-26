@@ -265,8 +265,6 @@ rolebinding.rbac.authorization.k8s.io/uthred-pod-reader unchanged
 ```
 The curl command is now executable.
 
-
-
 # 🛡️ Kubernetes ServiceAccount Example
 
 This example demonstrates how to create a `ServiceAccount`, a `Role`, and a `RoleBinding` in a specific namespace of a Kubernetes cluster (e.g., a `kind` cluster).
@@ -281,7 +279,7 @@ This example demonstrates how to create a `ServiceAccount`, a `Role`, and a `Rol
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: rbac-example
+  name: rbac-test
 ```
 
 ---
@@ -293,7 +291,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: pod-list-serviceaccount
-  namespace: rbac-example
+  namespace: rbac-test
 ```
 
 ---
@@ -305,7 +303,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: pod-reader
-  namespace: rbac-example
+  namespace: rbac-test
 rules:
 - apiGroups: [""]
   resources: ["pods"]
@@ -321,22 +319,25 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: read-pods-binding
-  namespace: rbac-example
+  namespace: rbac-test
 subjects:
 - kind: ServiceAccount
   name: pod-reader
-  namespace: rbac-example
+  namespace: rbac-test
 roleRef:
   kind: Role
   name: pod-reader
   apiGroup: rbac.authorization.k8s.io
 ```
+The role binding in the previous example can be reused as in:
+
+[uthred-pod-reader-rolebinding.yaml](config%2Frbac%2Futhred-pod-reader-rolebinding.yaml)
 
 ---
 
 ## ✅ Usage
 
-Once applied, the ServiceAccount `my-serviceaccount` in `my-namespace` can be used by Pods to list/watch/get pods in that namespace.
+Once applied, the ServiceAccount `pod-list-serviceaccount` in `rbac-test` can be used by Pods to list/watch/get pods in that namespace.
 
 You can associate it with a Pod like this:
 
@@ -344,22 +345,29 @@ You can associate it with a Pod like this:
 apiVersion: v1
 kind: Pod
 metadata:
-  name: my-pod
-  namespace: my-namespace
+  name: serviceaccount-pod
+  namespace: rbac-test
 spec:
-  serviceAccountName: my-serviceaccount
+  serviceAccountName: pod-list-serviceaccount
   containers:
-  - name: my-container
-    image: busybox
-    command: ["sleep", "3600"]
+    - name: kubectl-container
+      image: bitnami/kubectl:latest
+      command: ["sleep", "3600"]
 ```
 
----
+We can test the pod
+```bash
+$ kubectl apply -f serviceaccount-pod.yaml
+pod/serviceaccount-pod created
 
-> The Service account can be added to the role created for the user, 
-> together with the role binding as in the example files.
+$kubectl exec -it serviceaccount-pod -- sh
 
-TBC
+    $ kubectl get pods
+    NAME                                  READY   STATUS    RESTARTS   AGE
+    backend-deployment-76cfdcfdd8-8gxkh   1/1     Running   0          48m
+    backend-deployment-76cfdcfdd8-gkzg8   1/1     Running   0          48m
+    serviceaccount-pod                    1/1     Running   0          34s
+```
 
 
 
