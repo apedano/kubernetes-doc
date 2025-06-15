@@ -1,5 +1,39 @@
 # Appendix C - Networking
 
+<!-- TOC -->
+* [Appendix C - Networking](#appendix-c---networking)
+  * [Create the sample application](#create-the-sample-application)
+    * [Init kind cluster](#init-kind-cluster)
+    * [Deploy backend app](#deploy-backend-app)
+    * [Expose backend app with `Service` of type `ClusterIp`](#expose-backend-app-with-service-of-type-clusterip)
+      * [CoreDNS and `kube-dns` service for DNS `Service` name resolution](#coredns-and-kube-dns-service-for-dns-service-name-resolution)
+  * [`ClusterIP` Services and `kube-proxy`](#clusterip-services-and-kube-proxy)
+    * [`kube-proxy` and IPTables](#kube-proxy-and-iptables)
+  * [CASE 1 - POD to `ClusterIP` Service traffic](#case-1---pod-to-clusterip-service-traffic)
+    * [Create a pod in the kind cluster to call the backend svc](#create-a-pod-in-the-kind-cluster-to-call-the-backend-svc)
+    * [Connect to a cluster node](#connect-to-a-cluster-node)
+    * [Analyse the iptables NAT table in the master node](#analyse-the-iptables-nat-table-in-the-master-node)
+    * [Hairpin NAT - POD sending traffic to a Service it belongs to](#hairpin-nat---pod-sending-traffic-to-a-service-it-belongs-to)
+    * [Using headless Service to connect directly to pods](#using-headless-service-to-connect-directly-to-pods)
+  * [Case 2 - POD to `NodePort` Service traffic](#case-2---pod-to-nodeport-service-traffic)
+    * [Deploy the frontend application and `NodePort` Service](#deploy-the-frontend-application-and-nodeport-service)
+    * [Make the kind claster accessible at the NodePort](#make-the-kind-claster-accessible-at-the-nodeport)
+    * [iptables setting for NodePort traffic handling](#iptables-setting-for-nodeport-traffic-handling)
+  * [Case 2 - POD to `LoadBalancer` Service traffic](#case-2---pod-to-loadbalancer-service-traffic)
+    * [LB health checks](#lb-health-checks)
+  * [Kubernetes `externalTrafficPolicy` Explained](#kubernetes-externaltrafficpolicy-explained)
+  * [Values of `externalTrafficPolicy`](#values-of-externaltrafficpolicy)
+    * [1. `Cluster` (default)](#1-cluster-default)
+    * [2. `Local`](#2-local)
+  * [Example YAML](#example-yaml)
+  * [Expose traffic using NGINX Ingress](#expose-traffic-using-nginx-ingress)
+    * [Create a kind cluster](#create-a-kind-cluster)
+    * [Install Nginx controller](#install-nginx-controller)
+    * [Deploy sample workload](#deploy-sample-workload)
+    * [Deploy `Ingress`](#deploy-ingress)
+    * [Test call](#test-call)
+<!-- TOC -->
+
 https://learnk8s.io/kubernetes-services-and-load-balancing
 
 > The following commands are based on a Kind cluster running on Ubuntu with the KIND load balancer running
@@ -16,7 +50,7 @@ and the backend tier, which is a stateful API containing a list of job titles.
 We will use kind with the two node cluster example in the config file
 
 ```bash
-PS C:\projects\kubernetes-doc\config> kind create cluster --config .\my-two-nodes-cluster-config.yaml
+PS C:\projects\kubernetes-doc\config> kind create cluster --config .\my-two-nodes-cluster-for-statefulset.yaml
 ```
 
 ### Deploy backend app
@@ -337,6 +371,84 @@ and the **reverse NAT** (Source and Dest) is performed
 | SourceIP                         | DestinationIP                     | Mark |
 |----------------------------------|-----------------------------------|------|
 | `10.0.0.10` (from original DNAT) | `10.244.1.6` (from original SNAT) |      |
+
+
+### Using headless Service to connect directly to pods
+
+https://wangwei1237.github.io/Kubernetes-in-Action-Second-Edition/docs/Understanding_DNS_records_for_Service_objects.html#1142-using-headless-services-to-connect-to-pods-directly
+
+[create-cluster.sh](config%2Fnetworking%2Fheadless%2Fcreate-cluster.sh)
+
+Services expose a set of pods at a stable IP address. 
+Each connection to that IP address is automatically distributed across its Endpoints.
+
+> The headless Service configure the internal DNS to return the pod IPs instead of the service’s cluster IP
+
+This allows direct POD addressing from external or pod-to-pod traffic.
+
+For headless services, the cluster DNS returns not just a single A record pointing to the service’s cluster IP, 
+but **multiple `A` records, one for each pod that’s part of the service**. 
+Clients can therefore query the DNS to get the IPs of all the pods in the service.
+
+By applying the Service in the file 
+
+[workloads.yaml](config%2Fnetworking%2Fheadless%2Fworkloads.yaml)
+
+we notice that
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-headless-service
+spec:
+  selector:
+    app: my-headless-app
+  clusterIP: None  # This makes it a headless service
+```
+The `none` value makes the cluster create multiple DNS record for each pod, instead of the typical single one.
+
+We can interrogate the kube-dns service from within a random pod in the deployment.
+
+This will return a separate DNS record for each pod.
+
+```shell
+root@LAPTOP-6ONT27E9:/home/pedaa00/kube-config/networking/headless# kubectl exec -it my-headless-deployment-6c7f5cc86-986bn -- nslookup my-headless-service.default.svc.cluster.local
+Server:         10.96.0.10
+Address:        10.96.0.10:53
+
+Name:   my-headless-service.default.svc.cluster.local
+Address: 10.244.0.13
+Name:   my-headless-service.default.svc.cluster.local
+Address: 10.244.0.11
+Name:   my-headless-service.default.svc.cluster.local
+Address: 10.244.0.12
+```
+
+Despite a normal ClusterIP service when the DNS call returns always the same service IP
+
+```shell
+/ # nslookup quote
+Server:         10.96.0.10
+Address:        10.96.0.10#53 //
+
+Name:   quote.kiada.svc.cluster.local ##ClusterIP DNS name
+Address: 10.96.161.97
+
+/ # curl --verbose http://quote
+*   Trying 10.96.161.97:80...
+* Connected to quote (10.96.161.97) port 80 (#0)
+```
+
+The DNS lookup for the **headless service name returns every time one of the POD IP directly**. 
+
+```shell
+/ # while true; do curl http://quote-headless; done
+This is the quote service running in pod quote-002
+This is the quote service running in pod quote-001
+This is the quote service running in pod quote-002
+This is the quote service running in pod quote-canary
+```
 
 ## Case 2 - POD to `NodePort` Service traffic
 

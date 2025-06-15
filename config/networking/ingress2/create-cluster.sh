@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-
-echo "From https://kk-shichao.medium.com/expose-service-using-nginx-ingress-in-kind-cluster-from-wsl2-14492e153e99"
-echo "https://dustinspecker.com/posts/test-ingress-in-kind/"
-
 echo "Delete pre existing cluster"
 
 

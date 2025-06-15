@@ -7,7 +7,7 @@ https://kind.sigs.k8s.io/docs/user/quick-start/
 The config is in the folder pointed by the symbolic link created before
 
 ```bash
-kind create cluster --config ./kube-config/my-two-nodes-cluster-config.yaml
+kind create cluster --config ./kube-config/my-two-nodes-cluster-for-statefulset.yaml
 ```
 
 ```bash

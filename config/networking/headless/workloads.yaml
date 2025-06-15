@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-headless-service
+spec:
+  selector:
+    app: my-headless-app
+  ports:
+    - port: 80
+      targetPort: 8080
+  clusterIP: None  # This makes it a headless service
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-headless-deployment
+spec:
+  replicas: 3  # Number of pods
+  selector:
+    matchLabels:
+      app: my-headless-app
+  template:
+    metadata:
+      labels:
+        app: my-headless-app
+    spec:
+      containers:
+        - name: my-headless-container
+          image: busybox
+          command: [ "sleep", "3600" ]
