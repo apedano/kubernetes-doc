@@ -26,6 +26,7 @@ kube-dns   ClusterIP   10.96.0.10   53/UDP,53/TCP,9153/TCP
 kubectl run curl-client --rm -i --tty --image=curlimages/curl -- /bin/sh
 ```
 
+
 * `kubectl run` is the command to create and run a new pod.
 * `curl-client` is the name you're assigning to the pod.
 * `--rm` tells Kubernetes to delete the pod as soon as you exit the shell session. This is very useful for ephemeral debugging pods that you don't need to persist.
@@ -44,7 +45,7 @@ $ kubectl exec -it <pod_name> -- sh
 
 
 
-## Read logs from a pos or a selector
+## Read logs from a pod or a selector
 
 ```shell
 $ kubectl logs -f pod/shared-volume-pod -c reader
@@ -57,6 +58,16 @@ Hello from writer container
 `-f` follows the log (same as tailing)
 `-l` label to select pods
 
+## Wait
 
+### Wait for a deployment to be ready
 
+```shell
+kubectl wait deployment/my-app --for=condition=available --timeout=120s
+```
+
+```yaml
+#after a deployment file has been applied
+kubectl rollout status deploy my-app-v2 -w
+```
 

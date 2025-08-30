@@ -15,8 +15,6 @@ Install critcl
 apt install critcl
 
 
-
-
 # Inspecting Linux Process Namespace and Cgroup of a Pod in a Kind Cluster (Using Podman)
 
 ## 🔍 Understanding the Setup
@@ -97,7 +95,7 @@ cat /proc/self/cgroup
 ```
 
 ---
-
+ 
 ## 🛠️ Tools You Might Need
 
 Make sure you have:
@@ -110,6 +108,82 @@ sudo apt install -y jq util-linux cri-tools
 
 ---
 
-## ✅ Bonus: What You Can Automate
+## Sidecar containers
 
-Would you like a Bash script to gather this info for a specific pod?
+> Sidecar containers are the **secondary containers that run along with the main application** container within the same Pod. 
+
+These containers are used to enhance or to extend the functionality of the primary app container by providing additional services, 
+or functionality such as **logging, monitoring, security, or data synchronization**, without directly altering the primary application code.
+ 
+### Containers type in a pod
+
+![containser_types.png](images%2F03%2Fcontainser_types.png)
+
+#### init containers
+One or more init containers, which are **run before the app containers are started**.
+Init containers are exactly like regular containers, except:
+* Init containers always run to completion.
+* Each init container must complete successfully before the next one starts.
+* **do not support probes**
+* have **dedicated resource** (cpu and mem) definition 
+* When all of the init **containers have run to completion** in sequence, kubelet initializes the application containers for the Pod and 
+  runs them as usual.If a Pod's **init container fails**, the kubelet repeatedly restarts that init container until it succeeds. 
+  However, if the Pod has a `restartPolicy` of `Never`, and an init container fails during startup of that Pod, 
+  Kubernetes treats the overall Pod as failed.
+* init containers offer a mechanism to block or delay app container startup until a set of **preconditions** are met.
+
+#### app container
+is the main container application, if restarted, the entire pod will be restarted. 
+
+Multiple app containers can run in parallel within the same pod, this is done when the 
+the main application container requires other components or services to run.
+ 
+#### sidecar container
+ 
+* can be started, stopped, or restarted without affecting the main application container and other init containers.
+* Sidecar containers run concurrently with the main application container and they are not stopped as the init containers 
+* Unlike init containers, **sidecar containers support probes** to control their lifecycle.
+* Sidecar containers can interact directly with the main application containers, because like init containers they always **share the same network, and can optionally also share volumes** (filesystems).
+
+### Example 
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+  labels:
+    app: myapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: myapp
+  template:
+    metadata:
+      labels:
+        app: myapp
+    spec:
+      containers:
+        - name: myapp
+          image: alpine:latest
+          command: ['sh', '-c', 'while true; do echo "logging" >> /opt/logs.txt; sleep 1; done']
+          volumeMounts:
+            - name: data
+              mountPath: /opt
+      initContainers:
+        - name: logshipper
+          image: alpine:latest
+          restartPolicy: Always
+          command: ['sh', '-c', 'tail -F /opt/logs.txt']
+          volumeMounts:
+            - name: data
+              mountPath: /opt
+      volumes:
+        - name: data
+          emptyDir: {}
+```
+
+
+![sidecar_logging_container.png](images%2F03%2Fsidecar_logging_container.png)
+
